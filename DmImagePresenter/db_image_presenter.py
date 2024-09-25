@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLineEdit, QListWidget, QLabel, QTabWidget,
     QListWidgetItem, QFileDialog, QAbstractItemView, QMainWindow, QToolButton, QStyle
 )
-from PySide6.QtGui import QPixmap, QIcon, QPainter, QImageReader
+from PySide6.QtGui import QPixmap, QIcon, QPainter, QImageReader, QImage
 from PySide6.QtCore import Qt, QSize, QObject, Signal
 import sys
 import os
@@ -94,8 +94,8 @@ class MainWindow(QWidget):
         left_layout.addWidget(self.file_list)
 
         # Set larger icon size for thumbnails
-        thumbnail_size = QSize(128, 128)
-        self.file_list.setIconSize(thumbnail_size)
+        self.thumbnail_size = QSize(128, 128)
+        self.file_list.setIconSize(self.thumbnail_size)
 
         # Add left widget to splitter
         main_splitter.addWidget(left_widget)
@@ -192,11 +192,9 @@ class MainWindow(QWidget):
                 item.setData(Qt.UserRole, image_path)
                 item.setToolTip(image_path)
 
-                # Create thumbnail
-                pixmap = self.load_pixmap(image_path)
-                if not pixmap.isNull():
-                    # Use larger thumbnails
-                    thumbnail = pixmap.scaled(self.file_list.iconSize(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                # Generate and set thumbnail
+                thumbnail = self.generate_thumbnail(image_path)
+                if not thumbnail.isNull():
                     item.setIcon(QIcon(thumbnail))
                 else:
                     # Use a placeholder icon if the image fails to load
@@ -204,10 +202,11 @@ class MainWindow(QWidget):
 
                 self.file_list.addItem(item)
 
-    def load_pixmap(self, image_path: str) -> QPixmap:
-        # Use QImageReader to handle images properly
+    def generate_thumbnail(self, image_path: str) -> QPixmap:
+        # Generate a thumbnail without loading the full image into memory
         reader = QImageReader(image_path)
         reader.setAutoDetectImageFormat(True)
+        reader.setScaledSize(self.thumbnail_size)
         image = reader.read()
         if not image.isNull():
             return QPixmap.fromImage(image)
@@ -245,70 +244,94 @@ class MainWindow(QWidget):
 
         pixmaps = []
         for image_path in tab.selected_images:
-            pixmap = self.load_pixmap(image_path)
+            pixmap = self.load_full_image(image_path)
             if not pixmap.isNull():
                 pixmaps.append(pixmap)
 
         # Create a combined image based on the number of selected images
-        combined_pixmap = self.combine_images(pixmaps)
-        # Scale the pixmap to fit the label size
-        scaled_pixmap = combined_pixmap.scaled(
-            tab.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
-        tab.preview_label.setPixmap(scaled_pixmap)
+        combined_pixmap = self.combine_images(pixmaps, tab.preview_label.size())
+        tab.preview_label.setPixmap(combined_pixmap)
 
-    def combine_images(self, pixmaps: List[QPixmap]) -> QPixmap:
+    def load_full_image(self, image_path: str) -> QPixmap:
+        # Load the full-resolution image from the file
+        return QPixmap(image_path)
+
+    def combine_images(self, pixmaps: List[QPixmap], target_size: QSize) -> QPixmap:
         if not pixmaps:
             return QPixmap()
 
         count = len(pixmaps)
-        # Determine the layout based on the number of images
+        target_width = target_size.width()
+        target_height = target_size.height()
+
         if count == 1:
-            return pixmaps[0]
+            # Scale the image to fill the widget while maintaining aspect ratio
+            return pixmaps[0].scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         elif count == 2 or count == 3:
             # Arrange images horizontally
-            heights = [pixmap.height() for pixmap in pixmaps]
-            max_height = max(heights)
             # Scale images to have the same height
+            max_height = target_height
             scaled_pixmaps = []
+            total_width = 0
             for pixmap in pixmaps:
                 scaled_pixmap = pixmap.scaledToHeight(max_height, Qt.SmoothTransformation)
                 scaled_pixmaps.append(scaled_pixmap)
+                total_width += scaled_pixmap.width()
 
-            total_width = sum([pixmap.width() for pixmap in scaled_pixmaps])
-            combined = QPixmap(total_width, max_height)
+            # Adjust scaling if total width exceeds target width
+            if total_width > target_width:
+                scaling_factor = target_width / total_width
+                scaled_pixmaps = [
+                    pixmap.scaled(
+                        pixmap.width() * scaling_factor,
+                        pixmap.height() * scaling_factor,
+                        Qt.IgnoreAspectRatio,
+                        Qt.SmoothTransformation
+                    ) for pixmap in scaled_pixmaps
+                ]
+                max_height = scaled_pixmaps[0].height()
+                total_width = sum([pixmap.width() for pixmap in scaled_pixmaps])
+
+            combined = QPixmap(int(total_width), int(max_height))
             combined.fill(Qt.transparent)
             painter = QPainter(combined)
 
             x_offset = 0
             for pixmap in scaled_pixmaps:
-                painter.drawPixmap(x_offset, 0, pixmap)
+                painter.drawPixmap(int(x_offset), 0, pixmap)
                 x_offset += pixmap.width()
 
             painter.end()
-            return combined
+
+            # Scale the combined image to fill the widget
+            return combined.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         elif count == 4:
             # Arrange images in a 2x2 grid
-            widths = [pixmap.width() for pixmap in pixmaps]
-            heights = [pixmap.height() for pixmap in pixmaps]
-            max_width = max(widths)
-            max_height = max(heights)
-            # Scale images to have the same size
-            scaled_pixmaps = []
-            for pixmap in pixmaps:
-                scaled_pixmap = pixmap.scaled(max_width, max_height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                scaled_pixmaps.append(scaled_pixmap)
+            # Scale images to fit half of the target size
+            half_width = target_width / 2
+            half_height = target_height / 2
+            scaled_pixmaps = [
+                pixmap.scaled(
+                    half_width, half_height,
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation
+                ) for pixmap in pixmaps
+            ]
 
-            combined = QPixmap(2 * max_width, 2 * max_height)
+            combined = QPixmap(int(target_width), int(target_height))
             combined.fill(Qt.transparent)
             painter = QPainter(combined)
 
-            positions = [(0, 0), (max_width, 0), (0, max_height), (max_width, max_height)]
+            positions = [
+                (0, 0), (half_width, 0),
+                (0, half_height), (half_width, half_height)
+            ]
             for pixmap, (x, y) in zip(scaled_pixmaps, positions):
-                painter.drawPixmap(x, y, pixmap)
+                painter.drawPixmap(int(x), int(y), pixmap)
 
             painter.end()
             return combined
+        else:
+            return QPixmap()
 
     def add_new_tab(self):
         new_tab = StagingTab()
@@ -326,21 +349,30 @@ class MainWindow(QWidget):
         if not current_tab:
             return
 
-        pixmap = current_tab.preview_label.pixmap()
-        if pixmap:
-            # Update the bottom-right preview
-            scaled_pixmap = pixmap.scaled(
-                self.output_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.output_label.setPixmap(scaled_pixmap)
-
-            # Update the separate window
-            if self.image_display_window:
-                self.image_display_window.update_image(pixmap)
-        else:
+        if not current_tab.selected_images:
             self.output_label.setText("No image selected")
+            self.output_label.setPixmap(QPixmap())
             if self.image_display_window:
                 self.image_display_window.image_label.clear()
+            return
+
+        # Load full-resolution images for output
+        pixmaps = []
+        for image_path in current_tab.selected_images:
+            pixmap = self.load_full_image(image_path)
+            if not pixmap.isNull():
+                pixmaps.append(pixmap)
+
+        # Combine images and scale to fill the output label
+        combined_pixmap = self.combine_images(pixmaps, self.output_label.size())
+        self.output_label.setPixmap(combined_pixmap)
+
+        # Update the separate window
+        if self.image_display_window:
+            # Combine images and scale to fill the window size
+            window_size = self.image_display_window.size()
+            combined_pixmap_full = self.combine_images(pixmaps, window_size)
+            self.image_display_window.update_image(combined_pixmap_full)
 
     def open_separate_window(self):
         if not self.image_display_window:
