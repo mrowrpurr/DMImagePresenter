@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['db_image_presenter.py'],
+    ['dm_image_presenter.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['H.ico'],
+    icon=['Resources\\Icon\\H.ico'],
 )

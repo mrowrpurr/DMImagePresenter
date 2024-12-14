@@ -3,7 +3,6 @@ name = "dmimagepresenter"
 version = "0.1.0"
 description = ""
 authors = ["Mrowr Purr <mrowr.purr@gmail.com>"]
-readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "<3.13,>=3.9,"
@@ -12,7 +11,7 @@ pyinstaller = "^6.10.0"
 poethepoet = "^0.29.0"
 
 [tool.poe.tasks]
-build-windows = "pyinstaller --onefile --windowed --noconfirm --name \"DM Image Presenter\" --icon H.ico dm_image_presenter.py"
+build-windows = "pyinstaller --onefile --windowed --noconfirm --name \"DM Image Presenter\" --icon Resources/Icon/H.ico dm_image_presenter.py"
 
 [build-system]
 requires = ["poetry-core"]
