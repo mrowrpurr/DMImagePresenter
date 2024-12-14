@@ -1,15 +1,15 @@
-# main.py
-
-from PySide6.QtWidgets import (
-    QApplication, QWidget, QSplitter, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLineEdit, QListWidget, QLabel, QTabWidget,
-    QListWidgetItem, QFileDialog, QAbstractItemView, QMainWindow, QToolButton, QStyle
-)
-from PySide6.QtGui import QPixmap, QIcon, QPainter, QImageReader, QImage
-from PySide6.QtCore import Qt, QSize, QObject, Signal
-import sys
 import os
+import sys
 from typing import List, Optional
+
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon, QImageReader, QPainter, QPixmap
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QFileDialog,
+                               QHBoxLayout, QLabel, QLineEdit, QListWidget,
+                               QListWidgetItem, QMainWindow, QPushButton,
+                               QSplitter, QStyle, QTabWidget, QToolButton,
+                               QVBoxLayout, QWidget)
+
 
 class ResizableLabel(QLabel):
     def __init__(self, *args, **kwargs):
